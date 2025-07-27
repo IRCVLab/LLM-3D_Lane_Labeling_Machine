@@ -804,12 +804,30 @@ class EventTools:
     
 
     def loadNextImage(self):
-        self.saveAll(self.img_path)
-        self.plotBackGround(self.img_path,0)
+        # Move to next image if possible
+        if not hasattr(self, 'list_img_path') or not self.list_img_path:
+            return
+        if not hasattr(self, 'imgIndex'):
+            self.imgIndex = 0
+        if self.imgIndex < len(self.list_img_path) - 1:
+            self.imgIndex += 1
+            self.img_path = self.list_img_path[self.imgIndex]
+            self.plotBackGround(self.img_path, 0)
+        else:
+            self.msgBoxReachEdgeEvent()
 
     def loadPrevImage(self):
-        self.saveAll(self.img_path)
-        self.plotBackGround(self.img_path,1)
+        # Move to previous image if possible
+        if not hasattr(self, 'list_img_path') or not self.list_img_path:
+            return
+        if not hasattr(self, 'imgIndex'):
+            self.imgIndex = 0
+        if self.imgIndex > 0:
+            self.imgIndex -= 1
+            self.img_path = self.list_img_path[self.imgIndex]
+            self.plotBackGround(self.img_path, 1)
+        else:
+            self.msgBoxReachEdgeEvent()
 
     def msgBoxReachEdgeEvent(self):
         msgBox = QMessageBox()

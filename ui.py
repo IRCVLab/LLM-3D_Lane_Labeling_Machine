@@ -73,7 +73,7 @@ class Window(QWidget, VizTools, EventTools):
         }
     }
 
-    def __init__(self,path):
+    def __init__(self, path, scene_idx, accumulate):
         super().__init__()
         self.data_path = os.getcwd() + os.sep + path
         # a figure instance to plot on
@@ -86,13 +86,15 @@ class Window(QWidget, VizTools, EventTools):
 
         self.nusc = TestCar(version='v1.0-trainval', dataroot=self.data_path, verbose=True)
         # data token variables
+        self.scene_idx = scene_idx
+        self.accumulate = accumulate
         self.scene_token = None
         self.sample_token = None
         self.cam_token = None
         self.R_lidar2cam, self.t_lidar2cam, self.k, self.distortion = None, None, None, None
         
-        self.loadImg(20)
-        self.load_scene_pcd(20)
+        self.loadImg()
+        self.load_scene_pcd()
         self.load_calibration_params()
         
         
@@ -109,23 +111,6 @@ class Window(QWidget, VizTools, EventTools):
         self.sampled_pts = []
         self.sampled_uv = []
         self.vtk_lanes = []  # VTK 라벨 여러 개 저장
-
-        # calibration params
-        # self.t, self.r, self.k, self.distortion = load_calibration_params()
-
-        # To store img path
-        # self.list_img_path = sorted([
-        #     f for f in os.listdir(self.data_path)
-        #     if f.endswith('.jpg') or f.endswith('.png')
-        # ])
-
-        # # PCD 파일명 리스트
-        # self.list_pcd_path = sorted([
-        #     f for f in os.listdir(self.pcd_dir)
-        #     if f.endswith('.pcd.bin')
-        # ])
-
-
 
         # LiDAR widget
         # self.vtk_actor = vtk.vtkActor()
@@ -422,6 +407,7 @@ class Window(QWidget, VizTools, EventTools):
         isPlot = True
         isEdge = False
 
+        print(f"Current Image: {img_path.split('/')[-1]}")
 
         if hasattr(self, 'lane_curve_artists'):
             # 안전하게 커브 아티스트 제거
@@ -530,11 +516,11 @@ class Window(QWidget, VizTools, EventTools):
     #                 self.list_img_path.append(os.path.join('image', file))
     #     except Exception as e:
     #         sys.exit(str(e))
-    def loadImg(self, scene_idx):
+    def loadImg(self):
         """
         TestCar API를 사용해서 해당 scene의 모든 이미지 경로를 리스트로 저장
         """
-        cur_scene = self.nusc.scene[scene_idx]
+        cur_scene = self.nusc.scene[self.scene_idx]
 
         # scene의 첫 sample부터 순차적으로 이미지 경로 수집
         self.sample_token = cur_scene['last_sample_token']  
@@ -548,11 +534,11 @@ class Window(QWidget, VizTools, EventTools):
             self.sample_token = sample['prev']
         self.list_img_path = list_img_path
 
-    def load_scene_pcd(self, scene_idx):
-        cur_scene = self.nusc.scene[scene_idx]
+    def load_scene_pcd(self):
+        cur_scene = self.nusc.scene[self.scene_idx]
         cur_sample = self.nusc.get('sample', cur_scene['last_sample_token'])
         sensor = 'LIDAR_TOP'
-        all_pc, all_t = LidarPointCloud.from_file_multisample(self.nusc, cur_sample, sensor, sensor, nsamples=3)
+        all_pc, all_t = LidarPointCloud.from_file_multisample(self.nusc, cur_sample, sensor, sensor, nsamples=self.accumulate)
         lidar_bin = all_pc.points.T
         intensities = lidar_bin[:, 3]
         intensities_normalized = (intensities - intensities.min()) / (intensities.ptp() + 1e-6)
@@ -692,7 +678,7 @@ class Window(QWidget, VizTools, EventTools):
         return True
 
 
-def genWindow(path):
+def genWindow(path, scene_idx, accumulate):
     app = QApplication(sys.argv)
     app.setStyle('Fusion')  # 또는 'Windows', 'WindowsVista', 'Mac', ...
     
@@ -719,7 +705,7 @@ def genWindow(path):
     """
     app.setStyleSheet(qss)
     
-    window = Window(path)
+    window = Window(path, scene_idx=scene_idx, accumulate=accumulate)
     window.showMaximized()
     window.show()
     sys.exit(app.exec_())
