@@ -458,16 +458,22 @@ class Window(QWidget, VizTools, EventTools):
             K = self.k.astype(np.float64)
             D = self.distortion.astype(np.float64)
             # OpenCV fisheye expects distortion to be (4,1) or (4,)
-            if D.shape[0] != 4:
-                D = np.zeros((4,), dtype=np.float64)
+            # if D.shape[0] != 4:
+            #     D = np.zeros((4,), dtype=np.float64)
 
-            Knew = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
-                K, D, (w, h), np.eye(3), balance=0.0
-            )
+            # Knew = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+            #     K, D, (w, h), np.eye(3), balance=0.0
+            # )
 
-            map1, map2 = cv2.fisheye.initUndistortRectifyMap(
-                K, D, np.eye(3), Knew, (w, h), cv2.CV_16SC2)
-            img_undistorted = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            # map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+            #     K, D, np.eye(3), Knew, (w, h), cv2.CV_16SC2)
+            # img_undistorted = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            # Standard undistortion (not fisheye)
+            # Get optimal new camera matrix
+            Knew, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w, h))
+            
+            # Undistort image using standard undistortion
+            img_undistorted = cv2.undistort(img, K, D, None, Knew)
             img_undistorted = cv2.cvtColor(img_undistorted, cv2.COLOR_BGR2RGB)
             self.img = img_undistorted
             
