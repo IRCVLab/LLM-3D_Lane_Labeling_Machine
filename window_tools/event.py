@@ -321,9 +321,6 @@ class EventTools:
             print(f"[VTK click] Drag start on existing actor: lane={best_li}, idx={best_ei}")
             return  # handled as drag start
 
-        print("[VTK click] Add new point.")
-        print("[DEBUG] Using NEW vtkCellPicker code - v3.0")
-
         # Use vtkCellPicker with higher tolerance for point cloud picking
         picker = vtk.vtkCellPicker()
         picker.SetTolerance(0.005)  # increased tolerance for better picking
@@ -410,6 +407,7 @@ class EventTools:
             if points_2d is None or len(points_2d) == 0:
                 self.delete_vtk_point()
                 QMessageBox.warning(None, 'WARNING', 'Clicked point projects outside current image.')
+                self.on_vtk_release()
                 return
                 
             x_img, y_img = float(points_2d[0][0]), float(points_2d[0][1])
@@ -428,6 +426,7 @@ class EventTools:
                         f'Keep points at least {margin}px from edges.\n'
                         f'Image size: {w}x{h}, Clicked: ({x_img:.1f}, {y_img:.1f})'
                     )
+                    self.on_vtk_release()
                     return
             if points_2d is not None and len(points_2d) > 0:
                 # 산점도 표시
@@ -453,7 +452,7 @@ class EventTools:
 
 
 
-    def on_vtk_release(self, obj, event):
+    def on_vtk_release(self):
         interactor = self.vtkWidget.GetRenderWindow().GetInteractor()
         release_pos = interactor.GetEventPosition()
         interactor.SetInteractorStyle(vtk.vtkInteractorStyleTrackballCamera())
@@ -684,23 +683,6 @@ class EventTools:
 
 
     def delete_vtk_point(self):
-        # if hasattr(self, 'vtk_lanes') and self.vtk_lanes:
-        #     last_lane = self.vtk_lanes[-1]
-        #     # numpy 배열인지, 파이썬 리스트인지 구분
-        #     if isinstance(last_lane, np.ndarray):
-        #         if last_lane.shape[0] > 0:
-        #             # 배열에서 마지막 행 제거
-        #             self.vtk_lanes[-1] = last_lane[:-1]
-        #         # 비어 있으면 레인 자체 제거
-        #         if self.vtk_lanes[-1].shape[0] == 0:
-        #             self.vtk_lanes.pop()
-        #     elif isinstance(last_lane, list):
-        #         if last_lane:
-        #             last_lane.pop()
-        #         if not last_lane:
-        #             self.vtk_lanes.pop()
-
-
         if hasattr(self, 'vtk_lane_points') and self.vtk_lane_points:
             # 아직 폴리라인으로 확정 전인 클릭 버퍼에서 pop
             self.vtk_lane_points.pop()
@@ -712,7 +694,14 @@ class EventTools:
             
 
     def add_lane(self):
-        """Collect current buffers and visualize lane using lane.py helpers only"""
+        
+        vtk_points_count = len(self.vtk_lane_points) if hasattr(self, 'vtk_lane_points') else 0
+        lane_points_count = len(self.lane_points) if hasattr(self, 'lane_points') else 0
+        
+        if vtk_points_count < 2 and lane_points_count < 2:
+            print(f"[add_lane] Insufficient points: VTK={vtk_points_count}, 2D={lane_points_count}. Need at least 2 points.")
+            return
+        
         # Ensure lane infrastructure exists
         if not hasattr(self, 'unified_lanes'):
             self.unified_lanes = []
@@ -804,9 +793,7 @@ class EventTools:
     
 
     def loadNextImage(self):
-        # Move to next image if possible
-        if not hasattr(self, 'list_img_path') or not self.list_img_path:
-            return
+        self.saveAll()
         if not hasattr(self, 'imgIndex'):
             self.imgIndex = 0
         if self.imgIndex < len(self.list_img_path) - 1:
@@ -817,9 +804,7 @@ class EventTools:
             self.msgBoxReachEdgeEvent()
 
     def loadPrevImage(self):
-        # Move to previous image if possible
-        if not hasattr(self, 'list_img_path') or not self.list_img_path:
-            return
+        self.saveAll()
         if not hasattr(self, 'imgIndex'):
             self.imgIndex = 0
         if self.imgIndex > 0:
@@ -845,19 +830,13 @@ class EventTools:
         else:
             return False
 
-    def saveAll(self, img_path):
+    def saveAll(self):
         ind = self.imgIndex
-        if self.imgIndex == len(self.list_img_path):
-            ind = ind - 1
-
-        if self.imgIndex == -1:
-            ind = ind + 1
-
-        # Get current image path
-        # Save label JSON in ./data/label/<image_basename>.json
+        
         img_file = os.path.basename(self.list_img_path[ind])       # e.g. 000022.jpg
+        
         # Relative paths for dataset structure
-        image_rel_path = os.path.join("data", "image", img_file)   # e.g. data/image/000022.jpg
+        image_rel_path = os.path.join(self.data_path, "samples/CAM_FRONT/", img_file)   # e.g. data/image/000022.jpg
         label_dir = os.path.join("data", "label")                  # ./data/label
         os.makedirs(label_dir, exist_ok=True)
         json_name = os.path.splitext(img_file)[0] + ".json"
@@ -869,7 +848,6 @@ class EventTools:
         # 통합 레인 데이터 구조에서 저장
         if hasattr(self, 'unified_lanes') and self.unified_lanes:
             num_samples = 20  # 등간격 샘플링 개수
-
 
             for idx, lane in enumerate(self.unified_lanes):
                 lane_type = lane.get('type', 'Default')
@@ -888,14 +866,20 @@ class EventTools:
                         vtk_points = polydata.GetPoints()
                         num_points = vtk_points.GetNumberOfPoints()
                         pts3d = np.array([vtk_points.GetPoint(i) for i in range(num_points)])  # (N, 3)
-                        print(f"[saveAll] pts3d from vtk_actor: {pts3d}")
                     except Exception as e:
                         print(f"[saveAll] VTK actor 3D extraction error: {e}")
                 # 3순위: fallback - None
+                else:
+                    continue
 
-                sampled_3d = interpolate_lane_curve(pts3d, num_samples=num_samples)
-                sampled_2d = projection_pcd_to_img(sampled_3d, self.k, self.r_lidar2cam, self.t_lidar2cam)
+                if pts3d is None or len(pts3d) == 0:
+                    continue
 
+                try:
+                    sampled_3d = interpolate_lane_curve(pts3d, num_samples=num_samples)
+                    sampled_2d = projection_pcd_to_img(sampled_3d, self.k, self.r_lidar2cam, self.t_lidar2cam)
+                except Exception as e:
+                    continue
 
                 if sampled_2d.shape[0] < 2:
                     continue
@@ -911,7 +895,11 @@ class EventTools:
                     "attribute": 0
                 }
                 lane_data.append(lane_line)
+        else:
+            print(f"[saveAll] No unified_lanes found or empty")
 
+        print(f"[saveAll] Total lanes to save: {len(lane_data)}")
+        
         data = {
             "rotation": self.r_lidar2cam.tolist(),  # Rotation matrix
             "translation": self.t_lidar2cam.tolist(),  # Translation vector
@@ -923,6 +911,8 @@ class EventTools:
         try:
             with open(label_json_path, 'w') as f:
                 json.dump(data, f, indent=4)
-            print(f"Saved lane data to {label_json_path}")
+            print(f"[saveAll] SUCCESS: Saved lane data to {label_json_path}")
         except Exception as e:
-            print(f"Error saving file: {e}")
+            print(f"[saveAll] ERROR saving file: {e}")
+            import traceback
+            traceback.print_exc()

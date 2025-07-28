@@ -30,8 +30,8 @@ from utils.updater import DelayedUpdater
 
 from nuscenes.utils.data_classes import Box
 
-from data_toolkit.TestCar.tcar import TestCar
-from data_toolkit.TestCar.tcar.utils import LidarPointCloud
+from TestCar.tcar import TestCar
+from TestCar.tcar.utils import LidarPointCloud
 # set initial 4 points
 x1=800
 y1=100
@@ -47,7 +47,7 @@ y4=500
 
 
 class Window(QWidget, VizTools, EventTools):
-    imgIndex = -1
+    imgIndex = 0
     saveFlag = True
     # Lane 색상 및 타입 매핑
     LANE_COLORS = {
@@ -91,8 +91,11 @@ class Window(QWidget, VizTools, EventTools):
         self.scene_token = None
         self.sample_token = None
         self.cam_token = None
+        self.list_sample_tokens = []
+        self.list_img_path = []
         self.R_lidar2cam, self.t_lidar2cam, self.k, self.distortion = None, None, None, None
         
+        self.loadToken()
         self.loadImg()
         self.load_scene_pcd()
         self.load_calibration_params()
@@ -211,8 +214,8 @@ class Window(QWidget, VizTools, EventTools):
         delPointButton = QPushButton("Delete Point (d)")
         delPointButton.clicked.connect(self.delete_point)
 
-        curPosButton = QPushButton("Show current Labels (f)")
-        curPosButton.clicked.connect(self.showPosition)
+        # curPosButton = QPushButton("Show current Labels (f)")
+        # curPosButton.clicked.connect(self.showPosition)
 
         verticalSpacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
 
@@ -271,7 +274,7 @@ class Window(QWidget, VizTools, EventTools):
         rightLayout.addLayout(addLayout)
         rightLayout.addSpacing(20)
         rightLayout.addSpacing(20)
-        rightLayout.addWidget(curPosButton)
+        # rightLayout.addWidget(curPosButton)
         rightLayout.addWidget(self.editBox)
         rightLayout.addSpacing(20)
         rightLayout.addSpacerItem(verticalSpacer)
@@ -402,9 +405,11 @@ class Window(QWidget, VizTools, EventTools):
 
 
     def plotBackGround(self,img_path,action,isFirst=False):
+
+        self.load_scene_pcd()
+        self.load_calibration_params()
         self.unified_lanes = []  # 이미지 바뀔 때 레인 정보 초기화
         ''' Plot background method '''
-        isPlot = True
         isEdge = False
 
         print(f"Current Image: {img_path.split('/')[-1]}")
@@ -429,114 +434,103 @@ class Window(QWidget, VizTools, EventTools):
                     # 이미 제거된 경우 무시
                     pass
             self.all_point_artists.clear()
-                
-        if isPlot:
-            # increase img index
-            if action == 0 and self.imgIndex < len(self.list_img_path):
-                if self.imgIndex == -1 and isFirst == False :    # boundary scenario
-                    self.imgIndex += 1
-                self.imgIndex += 1
-            elif action == 1 and self.imgIndex > -1:
-                if self.imgIndex == len(self.list_img_path):
-                    self.imgIndex -= 1
-                self.imgIndex -= 1
+                        
+        if self.imgIndex == len(self.list_img_path) or (isFirst == False and self.imgIndex == -1):
+            print(f"current index: {self.imgIndex}")
+            isEdge = self.msgBoxReachEdgeEvent()
 
-            if self.imgIndex == len(self.list_img_path) or (isFirst == False and self.imgIndex == -1):
-                isEdge = self.msgBoxReachEdgeEvent()
+        if not isEdge:
+            # for faster scene update
+            self.canvas.setUpdatesEnabled(False)
 
-            if not isEdge:
-                # for faster scene update
-                self.canvas.setUpdatesEnabled(False)
+            # clean up list points
+            self.delAllLine()
 
-                # clean up list points
-                self.delAllLine()
+            path = self.list_img_path[self.imgIndex].replace('\\', '/')
 
-                path = self.list_img_path[self.imgIndex].replace('\\', '/')
+            img = cv2.imread(path)
+            if img is None:
+                print(f"이미지 {path}를 불러올 수 없습니다.")
+                return
+            else:
+                print(f"img.shape: {img.shape}, img.min(): {img.min()}, img.max(): {img.max()}, img.mean(): {img.mean()}")
+            h, w = img.shape[:2]
+            K = self.k.astype(np.float64)
+            D = self.distortion.astype(np.float64)
+            # OpenCV fisheye expects distortion to be (4,1) or (4,)
+            if D.shape[0] != 4:
+                D = np.zeros((4,), dtype=np.float64)
 
-                img = cv2.imread(path)
-                if img is None:
-                    print(f"이미지 {path}를 불러올 수 없습니다.")
-                    return
+            Knew = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+                K, D, (w, h), np.eye(3), balance=0.0
+            )
 
-                h, w = img.shape[:2]
-                K = self.k.astype(np.float64)
-                D = self.distortion.astype(np.float64)
-                # OpenCV fisheye expects distortion to be (4,1) or (4,)
-                if D.shape[0] != 4:
-                    D = np.zeros((4,), dtype=np.float64)
+            map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+                K, D, np.eye(3), Knew, (w, h), cv2.CV_16SC2)
+            img_undistorted = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            img_undistorted = cv2.cvtColor(img_undistorted, cv2.COLOR_BGR2RGB)
+            self.img = img_undistorted
+            
+            self.k = Knew.copy()
+            height, width, channels = img_undistorted.shape
 
-                Knew = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
-                    K, D, (w, h), np.eye(3), balance=0.0
-                )
+            if isFirst:
+                self.pyt = self.axes.imshow(img_undistorted)
+            else:
+                self.pyt.set_data(img_undistorted)
 
-                map1, map2 = cv2.fisheye.initUndistortRectifyMap(
-                    K, D, np.eye(3), Knew, (w, h), cv2.CV_16SC2)
-                img_undistorted = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-                img_undistorted = cv2.cvtColor(img_undistorted, cv2.COLOR_BGR2RGB)
-                self.img = img_undistorted
-                
-                self.k = Knew.copy()
-                height, width, channels = img_undistorted.shape
+            # initial (x,y) position in image range
+            global x1,y1,x2,y2,x3,y3,x4,y4
+            x_range = width - 0
+            y_range = height - 0
 
-                if isFirst:
-                    self.pyt = self.axes.imshow(img_undistorted)
-                else:
-                    self.pyt.set_data(img_undistorted)
+            self.canvasSize = [width, height]
 
-                # initial (x,y) position in image range
-                global x1,y1,x2,y2,x3,y3,x4,y4
-                x_range = width - 0
-                y_range = height - 0
+            # Divide into six equal segments
+            x1,x2,x3,x4 = x_range*(4.0/6), x_range*(3.0/6), x_range*(2.0/6), x_range*(1.0/6)
+            y1,y2,y3,y4 = y_range*(1.0/6), y_range*(2.0/6), y_range*(3.0/6), y_range*(4.0/6)
 
-                self.canvasSize = [width, height]
+            # Edit window title
+            self.setWindowTitle("IRCV: 3D Lane Labeling Tool")
 
-                # Divide into six equal segments
-                x1,x2,x3,x4 = x_range*(4.0/6), x_range*(3.0/6), x_range*(2.0/6), x_range*(1.0/6)
-                y1,y2,y3,y4 = y_range*(1.0/6), y_range*(2.0/6), y_range*(3.0/6), y_range*(4.0/6)
+            self.canvas.draw()
 
-                # Edit window title
-                self.setWindowTitle("IRCV: 3D Lane Labeling Tool")
+            # for faster scene update
+            self.canvas.setUpdatesEnabled(True)
+            self.vtkRenderer.RemoveAllViewProps() 
+            if self.intensityRadio.isChecked():
+                self.addPointCloudToVTK()
+            elif self.colorRadio.isChecked():
+                self.addColoredPointCloudToVTK()
 
-                self.canvas.draw()
-
-                # for faster scene update
-                self.canvas.setUpdatesEnabled(True)
-                self.vtkRenderer.RemoveAllViewProps() 
-                if self.intensityRadio.isChecked():
-                    self.addPointCloudToVTK(self.imgIndex)
-                elif self.colorRadio.isChecked():
-                    self.addColoredPointCloudToVTK(self.imgIndex)
-
-    # def loadImg(self, directory):
-    #     try:
-    #         self.list_img_path = []
-    #         for file in os.listdir(os.path.join(directory, 'image')):
-    #             if file.endswith('.jpg') or file.endswith('.png'):
-    #                 print(file)
-    #                 self.list_img_path.append(os.path.join('image', file))
-    #     except Exception as e:
-    #         sys.exit(str(e))
-    def loadImg(self):
-        """
-        TestCar API를 사용해서 해당 scene의 모든 이미지 경로를 리스트로 저장
-        """
+    def loadToken(self):
         cur_scene = self.nusc.scene[self.scene_idx]
-
-        # scene의 첫 sample부터 순차적으로 이미지 경로 수집
-        self.sample_token = cur_scene['last_sample_token']  
+        sample_token = cur_scene['first_sample_token']
+        list_sample_tokens = []
+        while sample_token != '':
+            list_sample_tokens.append(sample_token)
+            sample = self.nusc.get('sample', sample_token)
+            sample_token = sample['next']
+        self.list_sample_tokens = list_sample_tokens
+        print(f"Loaded {len(list_sample_tokens)} sample tokens for scene number: {self.scene_idx}")
+    
+    def loadImg(self):
         list_img_path = []
-        while self.sample_token != '':
-            sample = self.nusc.get('sample', self.sample_token)
-            self.cam_token = sample['data']['CAM_FRONT'] 
-            cam_data = self.nusc.get('sample_data', self.cam_token)
+        for token in self.list_sample_tokens:
+            sample = self.nusc.get('sample', token)
+            cam_token = sample['data']['CAM_FRONT']
+            cam_data = self.nusc.get('sample_data', cam_token)
             img_path = os.path.join(self.data_path, cam_data['filename'])
             list_img_path.append(img_path)
-            self.sample_token = sample['prev']
+        
         self.list_img_path = list_img_path
+        print(f"Loaded {len(list_img_path)} images for scene number: {self.scene_idx}")
 
     def load_scene_pcd(self):
-        cur_scene = self.nusc.scene[self.scene_idx]
-        cur_sample = self.nusc.get('sample', cur_scene['last_sample_token'])
+            
+        current_token = self.list_sample_tokens[self.imgIndex]
+        cur_sample = self.nusc.get('sample', current_token)
+
         sensor = 'LIDAR_TOP'
         all_pc, all_t = LidarPointCloud.from_file_multisample(self.nusc, cur_sample, sensor, sensor, nsamples=self.accumulate)
         lidar_bin = all_pc.points.T
@@ -551,6 +545,11 @@ class Window(QWidget, VizTools, EventTools):
         """Load and cache both ego→camera and ego→lidar calibration.
         Also pre-compute LiDAR→Camera extrinsic (R_l2c, t_l2c) for later use.
         """
+        # 현재 이미지 인덱스에 해당하는 샘플 토큰에서 카메라 토큰 가져오기
+        current_token = self.list_sample_tokens[self.imgIndex]
+        current_sample = self.nusc.get('sample', current_token)
+        self.cam_token = current_sample['data']['CAM_FRONT']
+        
         # --- ego → Camera (from the current CAM_FRONT sample_data) ---
         cam_sd = self.nusc.get('sample_data', self.cam_token)
         cam_calib = self.nusc.get('calibrated_sensor', cam_sd['calibrated_sensor_token'])
@@ -639,43 +638,6 @@ class Window(QWidget, VizTools, EventTools):
 
         self.editBox.setPlainText(text)
 
-
-    def isPosNotChange(self,img_path,index):
-        # load label txt
-        """
-        fileName = img_path+"label_txt"+os.sep+self.list_img_path[index][:-4]+".txt"
-        lab = []
-        labnp = np.array(lab)
-        curnp = np.array(lab)
-        try:
-            with open(fileName, 'r') as f:
-                x = f.read().splitlines()
-                for line in x:
-                    select,xstr1,ystr1,xstr2,ystr2,xstr3,ystr3,xstr4,ystr4 = line.split(',')
-                    x1,y1,x2,y2,x3,y3,x4,y4 = float(xstr1),float(ystr1),float(xstr2),float(ystr2),float(xstr3),float(ystr3),float(xstr4),float(ystr4)
-                    lab.append([x1,y1,x2,y2,x3,y3,x4,y4])
-                labnp = np.array(lab)
-
-        except IOError:
-            lab = []
-
-        # current dp
-        if self.list_points:
-            curnp = self.list_points[0].get_position()
-            for pts in range(1,len(self.list_points)):
-                curnp = np.vstack((curnp,self.list_points[pts].get_position()))
-            curnp = curnp.reshape(-1,8)
-
-        # check xdim
-        if labnp.shape[0] != curnp.shape[0]:
-            return False
-
-        # check content
-        for l in curnp:
-            if l not in labnp:
-                return False
-        """
-        return True
 
 
 def genWindow(path, scene_idx, accumulate):

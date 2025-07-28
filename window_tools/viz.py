@@ -19,21 +19,9 @@ class VizTools:
         camera.SetViewUp(1, 0, 0)
         self.vtkRenderer.ResetCameraClippingRange()
 
-    def addPointCloudToVTK(self, index=None, return_actor=False):
-        # if index is None:
-        #     index = self.imgIndex if self.imgIndex >= 0 else 0
-        # pcd_file_ = self.list_pcd_path[index]
-        # pcd_file = os.path.splitext(os.path.basename(pcd_file_))[0] + '.bin'
-        # pcd_path = os.path.join(self.pcd_dir, pcd_file)
+    def addPointCloudToVTK(self, return_actor=False):
         
-        # if not os.path.exists(pcd_path):
-        #     print(f"PCD 파일이 존재하지 않습니다: {pcd_path}")
-        #     return
-        # scan = np.fromfile(pcd_path, dtype=np.float32).reshape(-1, 4)
-        # points = scan[:, :3]
-        # intensity = scan[:, 3]
-        
-        # # 2. Normalize intensity to [0, 1] for color
+        # Normalize intensity to [0, 1] for color
         # intensity_normalized = (intensity - intensity.min()) / (intensity.max() - intensity.min() + 1e-8)
         # colors = np.stack([intensity_normalized]*3, axis=1)  # grayscale → RGB (N x 3)
         if hasattr(self, 'point_cloud_actor') and self.point_cloud_actor is not None:
@@ -93,25 +81,13 @@ class VizTools:
         if return_actor:
             return actor
 
-    def addColoredPointCloudToVTK(self, index=None, return_actor=False):
+    def addColoredPointCloudToVTK(self, return_actor=False):
         """
         Adds a point cloud to the VTK renderer with colors from the current RGB image.
         This projects the RGB image onto the point cloud.
         """
         try:
-            # # Get current image and point cloud
-            # img_file = self.list_img_path[self.imgIndex]
-            # pcd_file_ = self.list_pcd_path[index]
-            # pcd_file = os.path.splitext(os.path.basename(pcd_file_))[0] + '.bin'
-            # pcd_path = os.path.join(self.pcd_dir, pcd_file)
-            
-            # if not os.path.exists(pcd_path):
-            #     print(f"PCD 파일이 존재하지 않습니다: {pcd_path}")
-            #     return
-            # scan = np.fromfile(pcd_path, dtype=np.float32).reshape(-1, 4)
-            # points = scan[:, :3]
-            # intensity = scan[:, 3]
-            
+
             # points_np를 .bin에서 읽은 points로 바로 사용
             points_np = self.pcd_points_np[:, :3]
             
