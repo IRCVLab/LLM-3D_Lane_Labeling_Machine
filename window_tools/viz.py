@@ -75,11 +75,81 @@ class VizTools:
         style.SetMotionFactor(4)
         self.vtkWidget.GetRenderWindow().GetInteractor().SetInteractorStyle(style)
 
-        self.vtkRenderer.GetActiveCamera().Zoom(1.2)
+        self.vtkRenderer.GetActiveCamera().Zoom(4)
         
+
+
+        if hasattr(self, 'ego_star_actor') and self.ego_star_actor is not None:
+            self.vtkRenderer.RemoveActor(self.ego_star_actor)
+            self.ego_star_actor = None
+
+        import math
+
+        ego_x, ego_y, ego_z = 0.0, 0.0, 0.0
+        outer_r = 1.0          # 바깥 꼭짓점 반지름
+        inner_r = outer_r*0.45 # 안쪽 꼭짓점 반지름 (0.35~0.5 추천)
+        num_pts = 5            # 5각별
+        z_eps = 1e-3           # Z-fighting 방지 살짝 띄움
+
+        # 별 꼭짓점 좌표 (위로 향하게 시작각 -90°)
+        pts_xy = []
+        for i in range(num_pts):
+            # 바깥 점
+            ang_o = math.radians(-90 + 360 * i / num_pts)
+            pts_xy.append((ego_x + outer_r*math.cos(ang_o),
+                        ego_y + outer_r*math.sin(ang_o)))
+            # 안쪽 점
+            ang_i = math.radians(-90 + 360 * (i + 0.5) / num_pts)
+            pts_xy.append((ego_x + inner_r*math.cos(ang_i),
+                        ego_y + inner_r*math.sin(ang_i)))
+
+        # 교차 연결을 위한 인덱스 순서 (5각별 {5/2} 연결)
+        # 바깥 꼭짓점만 사용해도 되지만, 보기 좋은 폴리라인을 위해 아래처럼 구성
+        order = []
+        step = 2  # 두 칸 점프
+        idxs = list(range(0, 2*num_pts, 2))  # 바깥 점 인덱스들: 0,2,4,6,8
+        cur = 0
+        visited = set()
+        for _ in range(num_pts):
+            order.append(idxs[cur])
+            visited.add(idxs[cur])
+            cur = (cur + step) % len(idxs)
+        # 폐곡선으로
+        order.append(order[0])
+
+        # VTK 구조 만들기
+        vtk_points = vtk.vtkPoints()
+        for x, y in pts_xy:
+            vtk_points.InsertNextPoint(float(x), float(y), float(ego_z + z_eps))
+
+        # 라인 셀 (polyline)
+        lines = vtk.vtkCellArray()
+        lines.InsertNextCell(len(order))
+        for k in order:
+            lines.InsertCellPoint(k)
+
+        polydata = vtk.vtkPolyData()
+        polydata.SetPoints(vtk_points)
+        polydata.SetLines(lines)
+
+        # 매퍼/액터
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputData(polydata)
+
+        star_actor = vtk.vtkActor()
+        star_actor.SetMapper(mapper)
+        star_actor.GetProperty().SetColor(1.0, 0.85, 0.2)  # 노랑
+        star_actor.GetProperty().SetLineWidth(6.0)
+
+        self.vtkRenderer.AddActor(star_actor)
+        self.ego_star_actor = star_actor
+
+
+
         self.vtkWidget.GetRenderWindow().Render()
         if return_actor:
             return actor
+
 
     def addColoredPointCloudToVTK(self, return_actor=False):
         """

@@ -84,6 +84,11 @@ class Window(QWidget, VizTools, EventTools):
         self.axes.get_yaxis().set_visible(False)
 
 
+        self._cam_obs_id = None
+        self.ego_star_actor = None
+        self.ego_axes_actor = None
+
+
         self.nusc = TestCar(version='v1.0-trainval', dataroot=self.data_path, verbose=True)
         # data token variables
         self.scene_idx = scene_idx
@@ -201,7 +206,7 @@ class Window(QWidget, VizTools, EventTools):
         self.vtkButtonGroup = QButtonGroup(self)
         self.vtkButtonGroup.addButton(self.colorRadio)
         self.vtkButtonGroup.addButton(self.intensityRadio)
-        self.colorRadio.setChecked(True)
+        self.intensityRadio.setChecked(True)
 
         
            
@@ -565,7 +570,7 @@ class Window(QWidget, VizTools, EventTools):
         t_cam = np.asarray(cam_calib['translation']).reshape(3, 1)  # ego → cam
         r_cam = Quaternion(cam_calib['rotation']).rotation_matrix   # ego → cam
 
-        self.distortion = np.zeros(5)
+        self.distortion =  np.asarray(cam_calib['distortion'])
 
         # --- ego → LiDAR ---
         # 같은 sample의 LIDAR_TOP 사용
@@ -587,7 +592,6 @@ class Window(QWidget, VizTools, EventTools):
         # LiDAR→Camera :  (ego→Cam) ⋅ (LiDAR→ego)
         self.r_lidar2cam = r_cam @ R_l2e
         self.t_lidar2cam = r_cam @ t_l2e + t_cam  # shape (3,1
-        S = np.diag([1, 1, -1])
 
 
     def showPosition(self):
