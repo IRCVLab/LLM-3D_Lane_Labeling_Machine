@@ -84,6 +84,11 @@ class Window(QWidget, VizTools, EventTools):
         self.axes.get_yaxis().set_visible(False)
 
 
+        self._cam_obs_id = None
+        self.ego_star_actor = None
+        self.ego_axes_actor = None
+
+
         self.nusc = TestCar(version='v1.0-trainval', dataroot=self.data_path, verbose=True)
         # data token variables
         self.scene_idx = scene_idx
@@ -201,7 +206,7 @@ class Window(QWidget, VizTools, EventTools):
         self.vtkButtonGroup = QButtonGroup(self)
         self.vtkButtonGroup.addButton(self.colorRadio)
         self.vtkButtonGroup.addButton(self.intensityRadio)
-        self.colorRadio.setChecked(True)
+        self.intensityRadio.setChecked(True)
 
         
            
@@ -458,16 +463,22 @@ class Window(QWidget, VizTools, EventTools):
             K = self.k.astype(np.float64)
             D = self.distortion.astype(np.float64)
             # OpenCV fisheye expects distortion to be (4,1) or (4,)
-            if D.shape[0] != 4:
-                D = np.zeros((4,), dtype=np.float64)
+            # if D.shape[0] != 4:
+            #     D = np.zeros((4,), dtype=np.float64)
 
-            Knew = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
-                K, D, (w, h), np.eye(3), balance=0.0
-            )
+            # Knew = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+            #     K, D, (w, h), np.eye(3), balance=0.0
+            # )
 
-            map1, map2 = cv2.fisheye.initUndistortRectifyMap(
-                K, D, np.eye(3), Knew, (w, h), cv2.CV_16SC2)
-            img_undistorted = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            # map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+            #     K, D, np.eye(3), Knew, (w, h), cv2.CV_16SC2)
+            # img_undistorted = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            # Standard undistortion (not fisheye)
+            # Get optimal new camera matrix
+            Knew, roi = cv2.getOptimalNewCameraMatrix(K, D, (w, h), 1, (w, h))
+            
+            # Undistort image using standard undistortion
+            img_undistorted = cv2.undistort(img, K, D, None, Knew)
             img_undistorted = cv2.cvtColor(img_undistorted, cv2.COLOR_BGR2RGB)
             self.img = img_undistorted
             
@@ -559,7 +570,7 @@ class Window(QWidget, VizTools, EventTools):
         t_cam = np.asarray(cam_calib['translation']).reshape(3, 1)  # ego → cam
         r_cam = Quaternion(cam_calib['rotation']).rotation_matrix   # ego → cam
 
-        self.distortion = np.zeros(5)
+        self.distortion =  np.asarray(cam_calib['distortion'])
 
         # --- ego → LiDAR ---
         # 같은 sample의 LIDAR_TOP 사용
@@ -581,7 +592,6 @@ class Window(QWidget, VizTools, EventTools):
         # LiDAR→Camera :  (ego→Cam) ⋅ (LiDAR→ego)
         self.r_lidar2cam = r_cam @ R_l2e
         self.t_lidar2cam = r_cam @ t_l2e + t_cam  # shape (3,1
-        S = np.diag([1, 1, -1])
 
 
     def showPosition(self):

@@ -562,10 +562,10 @@ class EventTools:
             self.pcd_vtk_actor = None
         # --- 새 point cloud 추가 ---
         if self.colorRadio.isChecked():
-            actor = self.addColoredPointCloudToVTK(self.imgIndex, return_actor=True)
+            actor = self.addColoredPointCloudToVTK(return_actor=True)
             self.pcd_vtk_actor = actor
         elif self.intensityRadio.isChecked():
-            actor = self.addPointCloudToVTK(self.imgIndex, return_actor=True)
+            actor = self.addPointCloudToVTK(return_actor=True)
             self.pcd_vtk_actor = actor
         
     def radioButtonClicked(self):
