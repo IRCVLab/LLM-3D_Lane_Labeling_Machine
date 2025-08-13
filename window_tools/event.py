@@ -197,14 +197,26 @@ class EventTools:
                 # Update 3D data
                 lane['points_3d'][ei] = [nx, ny, nz]
                 
-                # Update VTK polyline in real-time
+                # Update VTK polyline in real-time (regenerate entire curve like VTK motion handler)
                 if lane.get('vtk_actor') is not None:
+                    pts3d = np.array(lane['points_3d'])
+                    if len(pts3d) >= 3:
+                        curve_points = interpolate_lane_curve(pts3d, num_samples=70)
+                    else:
+                        curve_points = pts3d
                     polydata = lane['vtk_actor'].GetMapper().GetInput()
                     vtk_pts = polydata.GetPoints()
-                    if vtk_pts is not None and ei < vtk_pts.GetNumberOfPoints():
-                        vtk_pts.SetPoint(ei, nx, ny, nz)
+                    # 점 개수가 다르면 새로 할당
+                    if vtk_pts is None or vtk_pts.GetNumberOfPoints() != len(curve_points):
+                        vtk_pts = vtk.vtkPoints()
+                        for pt in curve_points:
+                            vtk_pts.InsertNextPoint(float(pt[0]), float(pt[1]), float(pt[2]))
+                        polydata.SetPoints(vtk_pts)
+                    else:
+                        for i, pt in enumerate(curve_points):
+                            vtk_pts.SetPoint(i, float(pt[0]), float(pt[1]), float(pt[2]))
                         vtk_pts.Modified()
-                        lane['vtk_actor'].GetMapper().Update()
+                    lane['vtk_actor'].GetMapper().Update()
                 
                 # Update VTK point actor if exists
                 if lane.get('vtk_point_actors') and ei < len(lane['vtk_point_actors']):
