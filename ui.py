@@ -134,6 +134,11 @@ class Window(QWidget, VizTools, EventTools):
         interactor.AddObserver("LeftButtonPressEvent", self.on_vtk_click)
         interactor.AddObserver("MouseMoveEvent", self.on_vtk_motion)
         interactor.AddObserver("LeftButtonReleaseEvent", self.on_vtk_release)
+        
+        # Add camera interaction event observers to fix lane polyline sync issues
+        interactor.AddObserver("InteractionEvent", self.on_vtk_camera_interaction)
+        interactor.AddObserver("EndInteractionEvent", self.on_vtk_camera_interaction)
+        
         self._drag = {'active': False, 'vtk_actor': None}
 
 

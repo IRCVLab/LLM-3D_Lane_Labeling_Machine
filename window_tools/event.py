@@ -166,12 +166,66 @@ class EventTools:
         li = self._drag['lane_idx']
         ei = self._drag['end_idx']
         lane = self.unified_lanes[li]
+        x2d, y2d = event.xdata, event.ydata
+        
         # update 2d point
-        lane['points_2d'][ei] = [event.xdata, event.ydata]
+        lane['points_2d'][ei] = [x2d, y2d]
         
         # update the scatter point artist
         if 'img_points' in lane and ei < len(lane['img_points']) and lane['img_points'][ei] is not None:
-            lane['img_points'][ei].set_offsets([event.xdata, event.ydata])
+            lane['img_points'][ei].set_offsets([x2d, y2d])
+        
+        # --- Real-time 2D → 3D projection and VTK sync (similar to VTK motion handler) ---
+        try:
+            # lazy load point cloud if needed
+            if not hasattr(self, 'pcd_points_np'):
+                img_file = self.list_img_path[self.imgIndex]
+                pcd_file = os.path.splitext(os.path.basename(img_file))[0] + '.pcd'
+                pcd_path = os.path.join(self.pcd_dir, pcd_file)
+                pcd = o3d.t.io.read_point_cloud(pcd_path)
+                self.pcd_points_np = pcd.point.positions.numpy()
+            
+            points_np = self.pcd_points_np[:, :3]
+            rgb_img = self.pyt.get_array() if hasattr(self, 'pyt') else None
+            proj_res = projection_img_to_pcd(rgb_img, points_np, self.k, self.r_lidar2cam, self.t_lidar2cam,
+                                             np.array([[x2d, y2d]]), single_click=True)
+            pts3d = proj_res[0] if isinstance(proj_res, tuple) else proj_res
+            pts3d = np.asarray(pts3d).reshape(-1)
+            
+            if pts3d.size >= 3:
+                nx, ny, nz = [float(v) for v in pts3d[:3]]
+                # Update 3D data
+                lane['points_3d'][ei] = [nx, ny, nz]
+                
+                # Update VTK polyline in real-time
+                if lane.get('vtk_actor') is not None:
+                    polydata = lane['vtk_actor'].GetMapper().GetInput()
+                    vtk_pts = polydata.GetPoints()
+                    if vtk_pts is not None and ei < vtk_pts.GetNumberOfPoints():
+                        vtk_pts.SetPoint(ei, nx, ny, nz)
+                        vtk_pts.Modified()
+                        lane['vtk_actor'].GetMapper().Update()
+                
+                # Update VTK point actor if exists
+                if lane.get('vtk_point_actors') and ei < len(lane['vtk_point_actors']):
+                    act = lane['vtk_point_actors'][ei]
+                    if act is not None:
+                        pd = act.GetMapper().GetInput()
+                        pts = pd.GetPoints() if pd else None
+                        if pts is not None and pts.GetNumberOfPoints() > 0:
+                            pts.SetPoint(0, nx, ny, nz)
+                            pts.Modified()
+                            act.GetMapper().Update()
+                            act.Modified()
+                        act.SetPosition(0, 0, 0)
+                
+                # Render VTK view
+                if hasattr(self, 'vtkWidget'):
+                    self.vtkWidget.GetRenderWindow().Render()
+                    
+        except Exception as e:
+            print(f'[mpl_motion sync 2D→3D] {e}')
+        
         # update the line artist with smooth curve
         if lane.get('img_curve') is not None:
             xs, ys = centripetal_catmull_rom(lane['points_2d'])
@@ -452,7 +506,7 @@ class EventTools:
 
 
 
-    def on_vtk_release(self):
+    def on_vtk_release(self, obj=None, event=None):
         interactor = self.vtkWidget.GetRenderWindow().GetInteractor()
         release_pos = interactor.GetEventPosition()
         interactor.SetInteractorStyle(vtk.vtkInteractorStyleTrackballCamera())
@@ -464,6 +518,33 @@ class EventTools:
         if self._vtk_point_added and hasattr(self, '_vtk_press_pos') and self._vtk_press_pos != release_pos:
             self.delete_vtk_point()
             self._vtk_point_added = False
+    
+    def on_vtk_camera_interaction(self, obj, event):
+        """VTK camera interaction event handler to fix lane polyline sync issues"""
+        try:
+            # Force render all actors during camera interactions
+            if hasattr(self, 'vtkRenderer') and hasattr(self, 'vtkWidget'):
+                # Update all lane actors to ensure proper rendering
+                if hasattr(self, 'unified_lanes'):
+                    for lane in self.unified_lanes:
+                        # Update polyline actor
+                        if lane.get('vtk_actor') is not None:
+                            lane['vtk_actor'].Modified()
+                            lane['vtk_actor'].GetMapper().Update()
+                        
+                        # Update point actors
+                        if lane.get('vtk_point_actors'):
+                            for actor in lane['vtk_point_actors']:
+                                if actor is not None:
+                                    actor.Modified()
+                                    actor.GetMapper().Update()
+                
+                # Force complete render
+                self.vtkRenderer.Modified()
+                self.vtkWidget.GetRenderWindow().Render()
+                
+        except Exception as e:
+            print(f'[vtk_camera_interaction] Error: {e}')
 
 
     def on_vtk_motion(self, obj, event):
