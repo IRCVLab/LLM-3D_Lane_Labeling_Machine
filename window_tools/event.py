@@ -662,9 +662,11 @@ class EventTools:
             self.pcd_vtk_actor = actor
         
     def radioButtonClicked(self):
-        self.beforeRadioChecked.setAutoExclusive(False)
-        self.beforeRadioChecked.setChecked(False)
-        self.beforeRadioChecked.setAutoExclusive(True)
+        # Handle line type radio buttons (Yellow, White, White Dash)
+        if hasattr(self, 'beforeRadioChecked') and self.beforeRadioChecked:
+            self.beforeRadioChecked.setAutoExclusive(False)
+            self.beforeRadioChecked.setChecked(False)
+            self.beforeRadioChecked.setAutoExclusive(True)
 
         if self.lineRadio1.isChecked():
             self.beforeRadioChecked = self.lineRadio1
@@ -672,8 +674,10 @@ class EventTools:
             self.beforeRadioChecked = self.lineRadio2
         elif self.lineRadio3.isChecked():
             self.beforeRadioChecked = self.lineRadio3
-        else:
-            print("outofrange at radiobutton")
+        
+        # Handle RGB/Intensity radio buttons - trigger VTK view update
+        if self.colorRadio.isChecked() or self.intensityRadio.isChecked():
+            self.vtkViewClicked()
 
     def delAllLine(self):
         ''' del all lines to figure '''
