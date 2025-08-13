@@ -391,7 +391,7 @@ class Window(QWidget, VizTools, EventTools):
                 self.loadPrevImage()
                 return True
             elif text == 'x' or text=='ㅌ':
-                self.saveAll(self.data_path)
+                self.saveAll()
                 return True
             elif text == 'c' or text=='ㅊ':
                 self.loadNextImage()
