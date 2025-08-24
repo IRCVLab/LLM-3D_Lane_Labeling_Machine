@@ -18,6 +18,34 @@ class EventTools:
     Mixin for event handling methods (mouse, keyboard, matplotlib, etc)
     Assumes main Window class initializes all shared state and UI components.
     """
+
+    def clear_temp_points(self):
+        # 2D 점 및 시각화
+        if hasattr(self, 'lane_point_artists') and self.lane_point_artists:
+            for artist in self.lane_point_artists:
+                try:
+                    artist.remove()
+                except Exception:
+                    pass
+            self.lane_point_artists = []
+        if hasattr(self, 'lane_points'):
+            self.lane_points = []
+        # 3D 점 및 VTK actor
+        if hasattr(self, 'lane_vtk_actors') and self.lane_vtk_actors:
+            for actor in self.lane_vtk_actors:
+                try:
+                    self.vtkRenderer.RemoveActor(actor)
+                except Exception:
+                    pass
+            self.lane_vtk_actors = []
+        if hasattr(self, 'vtk_lane_points'):
+            self.vtk_lane_points = []
+        # 캔버스/VTK 갱신
+        if hasattr(self, 'canvas'):
+            self.canvas.draw_idle()
+        if hasattr(self, 'vtkWidget'):
+            self.vtkWidget.GetRenderWindow().Render()
+
     
     def initialize_lane_structures(self):
         """초기화 시 통합 레인 데이터 구조 설정"""
@@ -887,27 +915,32 @@ class EventTools:
         for pts in self.list_points:
             pts.disconnect()
         self.canvas.draw()
-    
 
     def loadNextImage(self):
         self.saveAll()
+        self.clear_temp_points()
         if not hasattr(self, 'imgIndex'):
             self.imgIndex = 0
         if self.imgIndex < len(self.list_img_path) - 1:
             self.imgIndex += 1
             self.img_path = self.list_img_path[self.imgIndex]
             self.plotBackGround(self.img_path, 0)
+            if hasattr(self, 'update_file_index_label'):
+                self.update_file_index_label()
         else:
             self.msgBoxReachEdgeEvent()
 
     def loadPrevImage(self):
         self.saveAll()
+        self.clear_temp_points()
         if not hasattr(self, 'imgIndex'):
             self.imgIndex = 0
         if self.imgIndex > 0:
             self.imgIndex -= 1
             self.img_path = self.list_img_path[self.imgIndex]
             self.plotBackGround(self.img_path, 1)
+            if hasattr(self, 'update_file_index_label'):
+                self.update_file_index_label()
         else:
             self.msgBoxReachEdgeEvent()
 

@@ -258,11 +258,11 @@ def projection_pcd_to_img(
         z_cam = lane_polyline_cam[2, :]
         mask = z_cam > 0.01
         lane_polyline_img = lane_polyline_img[mask]
-        if img_shape is not None and lane_polyline_img.shape[0] > 0:
-            H, W = img_shape[:2]
-            mask2 = (lane_polyline_img[:,0] >= 0) & (lane_polyline_img[:,0] < W) & \
-                    (lane_polyline_img[:,1] >= 0) & (lane_polyline_img[:,1] < H)
-            lane_polyline_img = lane_polyline_img[mask2]
+        # if img_shape is not None and lane_polyline_img.shape[0] > 0:
+        #     H, W = img_shape[:2]
+        #     mask2 = (lane_polyline_img[:,0] >= 0) & (lane_polyline_img[:,0] < W) & \
+        #             (lane_polyline_img[:,1] >= 0) & (lane_polyline_img[:,1] < H)
+        #     lane_polyline_img = lane_polyline_img[mask2]
         if lane_polyline_img.ndim != 2 or lane_polyline_img.shape[0] < 1:
             print("[projection_pcd_to_img] returning empty (0,2) array!")
             return np.empty((0, 2))

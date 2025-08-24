@@ -240,11 +240,11 @@ class Window(QWidget, VizTools, EventTools):
         saveButton = QPushButton("Save (x)")
         saveButton.clicked.connect(lambda: self.saveAll(self.data_path))
 
-        self.editBox = QPlainTextEdit()
-        self.editBox.setFixedWidth(160)
-        self.editBox.setPlainText("")
-        self.editBox.setReadOnly(True)
-        self.editBox.setDisabled(True)
+        # self.editBox = QPlainTextEdit()
+        # self.editBox.setFixedWidth(160)
+        # self.editBox.setPlainText("")
+        # self.editBox.setReadOnly(True)
+        # self.editBox.setDisabled(True)
 
 
         # Prepare a group button
@@ -268,8 +268,15 @@ class Window(QWidget, VizTools, EventTools):
         vtkGrouplayout.addWidget(self.colorRadio)
         vtkGrouplayout.addWidget(self.intensityRadio)
 
-        addDelLayout = QHBoxLayout()
+        addDelLayout = QVBoxLayout()
         addDelLayout.addWidget(delPointButton)
+        # QLabel for filename and index display
+        self.fileIndexLabel = QLabel()
+        self.fileIndexLabel.setStyleSheet("color: #f0f0f0; font-size: 12px; padding: 2px;")
+        self.fileIndexLabel.setAlignment(Qt.AlignCenter)
+        # self.fileIndexLabel.setWordWrap(True)
+        # self.fileIndexLabel.setMaximumWidth(160)
+        addDelLayout.addWidget(self.fileIndexLabel)
 
         addLayout = QVBoxLayout()
         addLayout.addWidget(addLaneLabel)
@@ -285,7 +292,7 @@ class Window(QWidget, VizTools, EventTools):
         rightLayout.addSpacing(20)
         rightLayout.addSpacing(20)
         # rightLayout.addWidget(curPosButton)
-        rightLayout.addWidget(self.editBox)
+        # rightLayout.addWidget(self.editBox)
         rightLayout.addSpacing(20)
         rightLayout.addSpacerItem(verticalSpacer)
         rightLayout.addLayout(saveLayout)
@@ -330,6 +337,23 @@ class Window(QWidget, VizTools, EventTools):
         
 
         self.plotBackGround(self.data_path,0,True)
+        self.update_file_index_label()
+
+    def update_file_index_label(self):
+        """Update the QLabel below DELETE POINT button with current filename and index."""
+        try:
+            if hasattr(self, 'list_img_path') and self.list_img_path and hasattr(self, 'imgIndex'):
+                fname = os.path.basename(self.list_img_path[self.imgIndex])
+                idx = self.imgIndex + 1
+                total = len(self.list_img_path)
+                n = len(fname)
+                third = n // 3
+                fname_split = fname[:third] + '\n' + fname[third:2*third] + '\n' + fname[2*third:]
+                self.fileIndexLabel.setText(f"{fname_split}\n({idx}/{total})")
+            else:
+                self.fileIndexLabel.setText("")
+        except Exception as e:
+            self.fileIndexLabel.setText("")
 
     # 단축키 함수들
     def select_yellow_line(self):
@@ -415,6 +439,7 @@ class Window(QWidget, VizTools, EventTools):
 
 
     def plotBackGround(self,img_path,action,isFirst=False):
+        self.update_file_index_label()
 
         self.load_scene_pcd()
         self.load_calibration_params()
