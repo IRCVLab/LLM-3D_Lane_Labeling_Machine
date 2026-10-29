@@ -38,6 +38,8 @@ y3=300
 x4=200
 y4=500
 
+x5=100
+y5=200
 
 class Window(QWidget, VizTools, EventTools):
     imgIndex = -1
